@@ -111,6 +111,17 @@ config firewall policy
         set service ALL
         set nat enable
     next
+    edit 0
+        set name ipsec-internet
+        set srcintf HUB1
+        set dstintf port1
+        set action accept
+        set srcaddr all
+        set dstaddr all
+        set schedule always
+        set service ALL
+        set nat enable
+    next
 end
 
 ```
@@ -280,40 +291,154 @@ execute ping 172.20.1.5
 
 <summary>Now that we have configured the overlay, we will add the "WAN" interface (port1) and the IPsec HUB1 interface to SD-WAN.  We will then create SLA monitoring in the remote site.</summary>
 
-### Task 1 - TBA
+### Task 1 - Add interfaces to SD-WAN
 
-* This will get filled out later
+#### Tidbit - In FortiOS, interfaces which already have policies attached to them are precluded from being added to SD-WAN.
 
-* **Congratulations!** You have completed the GCP-Basic portion of this training.
+* On the remote FortiGate, delete the existing firewall policies by opening a console connection and inputting the below configuration.  **Note: This will cause the IPsec tunnel to go down**
+
+```sh
+config firewall policy
+delete 1
+delete 2
+delete 3
+delete 4
+end
+```
+
+* Navigate to **Network > SD-WAN** and click on **Create New > SD-WAN Member** From the **Interface** drop down, choose **port1**.  Leave all other values as default.
+
+    ![overlay9](images/new-sdwan-member.jpg)
+
+* Navigate to **Network > SD-WAN** and click on **Create New > SD-WAN Member** From the **Interface** drop down, choose **HUB1**.  In the **SD-WAN Zone** drop down, click **Create** and name the new zone "overlay".  Leave all other values as default and click **OK** 
+
+    ![overlay10](images/hub1-sdwan.jpg)
+
+* Open a Console connection and add the below firewall policies.
+
+```sh
+config firewall policy
+    edit 0
+        set name overlay-out
+        set srcintf port2
+        set dstintf overlay
+        set action accept
+        set srcaddr all
+        set dstaddr all
+        set schedule always
+        set service SMTP
+        set nat enable
+    next
+    edit 0
+        set name vip-in
+        set srcintf virtual-wan-link
+        set dstintf port2
+        set action accept
+        set srcaddr all
+        set dstaddr ubu-serv
+        set schedule always
+        set service HTTP
+        set nat enable
+    next
+    edit 0
+        set name overlay-in
+        set srcintf overlay
+        set dstintf port2
+        set action accept
+        set srcaddr all
+        set dstaddr all
+        set schedule always
+        set service ALL
+        set nat enable
+    next
+    edit 0
+        set name port2-out
+        set srcintf port2
+        set dstintf virtual-wan-link
+        set action accept
+        set srcaddr all
+        set dstaddr all
+        set schedule always
+        set service ALL
+        set nat enable
+    next
+end
+```
+
+#### Tidbit - After interfaces have been added to SD-WAN, Policies are configured using the SD-WAN zone.  This simplifies policy configuration once multiple interfaces are added to the zones
+
+#### useful link - https://docs.fortinet.com/document/fortigate/7.2.3/administration-guide/942095/sd-wan-members-and-zones
+
+### Task 2 - Create SLA monitoring
+
+* Navigate to **Network > SD-WAN > Performance SLAs** and select the test named **Default_Google_Search"**.  Click **Edit**. Under **Participants** select **All SD-WAN Members**.  Leave all other values as default and click **OK**.  
+
+    ![overlay11](images/google-sla.jpg)
+
+* You may need to refresh the browser in order to see the SLA measurements.  Click on **Default_Google Search**.  You should now see performance data updating in real time for both the **HUB1** and **port1** interfaces.
+
+    ![overlay12](images/google-mon.jpg)
+
+* In the fires two steps, we used the default Googel performance SLA monitor.  While it's not unheard of to monitor a Public internet site over an IPSec tunnel to the cloud, a more realistic scenario would be to monitor a resource in our own cloud "Data Center"  Below is an example of a custom performance SLA monitoring hour Hub Ubunt Server (created in lab 3).
+
+    ![overlay13](images/ubu-hub-mon.jpg)
+
+#### useful link - https://docs.fortinet.com/document/fortigate/7.2.3/administration-guide/584396/performance-sla
+
+### Task 3 - Create SD-WAN Rules
+
+* Navigate to **Network > SD-WAN > SD-WAN Rules**.  Click **Create new**  Feel free to play around with the Values here.  At a minimum you will need to provide **Name**, **Destination Address or Internet Service**, **Interface selection strategy** and **Interface and/or Zone preference**.  **Note: The minimum required information will change, depending on which selection strategy you choose.  Our example below uses Best Quality, which additionally, requires us to choos a Measured SLA and Quality Criteria**
+
+    ![overlay14](images/oci-rule.jpg)
+
+#### useful link - https://docs.fortinet.com/document/fortigate/7.2.3/administration-guide/716691/sd-wan-rules 
+
+* **Congratulations!** You have completed this course!  Please answer the questions below.
 
 ***
   </details>
 
 ***
 
-<!-- ## Quiz
+## Quiz
 
 
 ### Question 1
 
-* A VM Instance in GCP can have multiple interfaces in the same VPC Network.  (True or False)
+* All GCP features can be configured from the GUI Console  (True or False)
 
 <details> 
 
 <summary>Answer</summary>
 
-* **False** - VMs can only have a single interface per VPC Network.
+* **False** - As we saw with load balancer forwarding rules, some configurations are only available using the gcloud cli.
 
 </details>
 
 ## Question 2
 
-* By default, External IP Addresses associated with vNICs in GCP are preserved across reboot (True or False)
+* Which hub ipsec phase1-interface setting enables dynamic assignment of IP address to remote peers?
+    a) set type dynamic
+    b) set add-route disable
+    c) set mode-cfg enable
+    d) set peertype any
 
 <details> 
 
 <summary>Answer</summary>
 
-* **False** - By default.  Ephemeral External IP Addresses are assigned to vNICs in GCP.
+* **C** - set mode-cfg enable along with  set ipv4-start-ip, set ipv4-end-ip and set ipv4-netmask are required on the hub to enable this feature.
 
-</details> -->
+</details>
+
+## Question 3
+
+* You must use the Zone ID in security policy for any interface which is added to SD-WAN (TRUE or False)
+
+<details> 
+
+<summary>Answer</summary>
+
+* **True** - once an interface is part of SD-WAN, you can no longer assign policy direcly to that interface.
+
+</details>
